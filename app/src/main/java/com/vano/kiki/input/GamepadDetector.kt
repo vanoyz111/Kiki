@@ -30,17 +30,25 @@ class GamepadDetector(context: Context) : InputManager.InputDeviceListener {
     }
 
     private fun refresh() {
-        val gamepad = InputDevice.getDeviceIds()
-            .mapNotNull { InputDevice.getDevice(it) }
-            .firstOrNull { device ->
-                !device.isVirtual && (
-                    (device.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                    (device.sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-                )
+        var found: InputDevice? = null
+
+        for (id in InputDevice.getDeviceIds()) {
+            val device: InputDevice = inputManager.getInputDevice(id) ?: continue
+            if (device.isVirtual) continue
+
+            val sources: Int = device.getSources()
+            val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            val isJoystick = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+
+            if (isGamepad || isJoystick) {
+                found = device
+                break
             }
+        }
+
         _state.value = GamepadInfo(
-            connected = gamepad != null,
-            deviceName = gamepad?.name
+            connected = found != null,
+            deviceName = found?.getName()
         )
     }
 
