@@ -36,6 +36,11 @@ class GamepadDetector(context: Context) : InputManager.InputDeviceListener {
             val device: InputDevice = inputManager.getInputDevice(id) ?: continue
             if (device.isVirtual) continue
 
+            val name = device.name?.lowercase() ?: ""
+            // HyperOS/MIUI daftarin virtual input node sendiri (mis. "uinput-xiaomi")
+            // yang selalu ada walau gak ada gamepad fisik nyambung — wajib di-skip.
+            if (name.contains("uinput")) continue
+
             val sources: Int = device.getSources()
             val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
             val isJoystick = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
