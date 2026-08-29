@@ -1,6 +1,9 @@
 package com.vano.kiki
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -40,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.vano.kiki.input.GamepadDetector
 import com.vano.kiki.mapping.AppInfoUi
 import com.vano.kiki.mapping.AppPickerDialog
+import com.vano.kiki.mapping.MappedAppStore
+import com.vano.kiki.overlay.OverlayService
 
 private val PinkBg = Color(0xFFFFE1F5)
 private val PinkAccent = Color(0xFFFF7FD1)
@@ -71,7 +76,9 @@ fun KikiHomeScreen() {
     val detector = remember { GamepadDetector(context) }
     val gamepad by detector.state.collectAsState()
 
-    val mappedApps = remember { mutableStateListOf<AppInfoUi>() }
+    val mappedApps = remember {
+        mutableStateListOf<AppInfoUi>().apply { addAll(MappedAppStore.load(context)) }
+    }
     var showAppPicker by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
@@ -85,6 +92,7 @@ fun KikiHomeScreen() {
             onAppSelected = { app ->
                 if (mappedApps.none { it.packageName == app.packageName }) {
                     mappedApps.add(app)
+                    MappedAppStore.save(context, mappedApps)
                 }
             }
         )
@@ -95,12 +103,10 @@ fun KikiHomeScreen() {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(listOf(PinkAccentLight, PinkAccent)),
-                    shape = RoundedCornerShape(28.dp)
-                )
+            modifier = Modifier.fillMaxWidth().background(
+                brush = Brush.verticalGradient(listOf(PinkAccentLight, PinkAccent)),
+                shape = RoundedCornerShape(28.dp)
+            )
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -193,7 +199,21 @@ fun KikiHomeScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(app.label, fontWeight = FontWeight.Medium)
-                            OutlinedButton(onClick = { /* TODO: mulai mapping */ }) {
+                            OutlinedButton(onClick = {
+                                if (!Settings.canDrawOverlays(context)) {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                    )
+                                } else {
+                                    context.startForegroundService(Intent(context, OverlayService::class.java))
+                                    context.packageManager.getLaunchIntentForPackage(app.packageName)?.let {
+                                        context.startActivity(it)
+                                    }
+                                }
+                            }) {
                                 Text("mulai")
                             }
                         }
