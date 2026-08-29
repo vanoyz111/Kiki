@@ -10,20 +10,32 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.IBinder
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.ServiceCompat
 import com.vano.kiki.MainActivity
+import com.vano.kiki.scene.MappingActionType
+import com.vano.kiki.scene.SceneNode
 import com.vano.kiki.scene.buildGenerateMenuView
-import kotlin.math.abs
+import com.vano.kiki.scene.buildNodeSettingsView
+import com.vano.kiki.scene.buildNodeView
+import com.vano.kiki.scene.makeDraggableOverlay
+import java.util.UUID
 
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var bubbleView: View? = null
+    private var bubbleParams: WindowManager.LayoutParams? = null
     private var menuView: View? = null
+    private var settingsView: View? = null
+
+    private val nodes = mutableMapOf<String, SceneNode>()
+    private val nodeViews = mutableMapOf<String, View>()
+    private val nodeParams = mutableMapOf<String, WindowManager.LayoutParams>()
+
+    private val tapSlopPx get() = 8 * resources.displayMetrics.density
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -38,6 +50,9 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         hideMenu()
+        hideSettings()
+        nodeViews.values.forEach { windowManager.removeView(it) }
+        nodeViews.clear()
         bubbleView?.let { windowManager.removeView(it) }
         bubbleView = null
     }
@@ -85,55 +100,27 @@ class OverlayService : Service() {
             y = 200
         }
 
-        var initialX = 0
-        var initialY = 0
-        var touchX = 0f
-        var touchY = 0f
-        var downX = 0f
-        var downY = 0f
-        val tapSlop = 8 * resources.displayMetrics.density
-
-        bubble.setOnTouchListener { view, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
-                    touchX = event.rawX
-                    touchY = event.rawY
-                    downX = event.rawX
-                    downY = event.rawY
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    params.x = initialX + (event.rawX - touchX).toInt()
-                    params.y = initialY + (event.rawY - touchY).toInt()
-                    windowManager.updateViewLayout(view, params)
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    val moved = abs(event.rawX - downX) > tapSlop || abs(event.rawY - downY) > tapSlop
-                    if (!moved) toggleMenu(params)
-                    true
-                }
-                else -> false
-            }
-        }
+        bubble.makeDraggableOverlay(windowManager, params, tapSlopPx) { toggleMenu() }
 
         windowManager.addView(bubble, params)
         bubbleView = bubble
+        bubbleParams = params
     }
 
-    private fun toggleMenu(bubbleParams: WindowManager.LayoutParams) {
-        if (menuView != null) hideMenu() else showMenu(bubbleParams)
+    private fun toggleMenu() {
+        if (menuView != null) hideMenu() else showMenu()
     }
 
-    private fun showMenu(bubbleParams: WindowManager.LayoutParams) {
+    private fun showMenu() {
+        val bp = bubbleParams ?: return
         val view = buildGenerateMenuView(
             context = this,
             onDismiss = { hideMenu() },
-            onActionPicked = { hideMenu() /* TODO: taruh node ke Scene */ }
+            onActionPicked = { action ->
+                hideMenu()
+                placeNode(action, bp.x, bp.y)
+            }
         )
-
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -142,10 +129,9 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = bubbleParams.x
-            y = bubbleParams.y + (64 * resources.displayMetrics.density).toInt()
+            x = bp.x
+            y = bp.y + (64 * resources.displayMetrics.density).toInt()
         }
-
         windowManager.addView(view, params)
         menuView = view
     }
@@ -153,5 +139,85 @@ class OverlayService : Service() {
     private fun hideMenu() {
         menuView?.let { windowManager.removeView(it) }
         menuView = null
+    }
+
+    private fun placeNode(action: MappingActionType, nearX: Int, nearY: Int) {
+        val node = SceneNode(
+            id = UUID.randomUUID().toString(),
+            actionId = action.id,
+            x = nearX,
+            y = nearY + (120 * resources.displayMetrics.density).toInt()
+        )
+        renderNode(node, action)
+    }
+
+    private fun renderNode(node: SceneNode, action: MappingActionType) {
+        nodes[node.id] = node
+        val view = buildNodeView(this, node, action.label)
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = node.x
+            y = node.y
+        }
+        view.makeDraggableOverlay(windowManager, params, tapSlopPx) {
+            showNodeSettings(node, action)
+        }
+        windowManager.addView(view, params)
+        nodeViews[node.id] = view
+        nodeParams[node.id] = params
+    }
+
+    private fun showNodeSettings(node: SceneNode, action: MappingActionType) {
+        if (settingsView != null) hideSettings()
+
+        val view = buildNodeSettingsView(
+            context = this,
+            node = node,
+            title = action.label,
+            onSave = { updated -> hideSettings(); updateNode(updated, action) },
+            onDelete = { hideSettings(); deleteNode(node.id) },
+            onCancel = { hideSettings() }
+        )
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER }
+
+        windowManager.addView(view, params)
+        settingsView = view
+    }
+
+    private fun hideSettings() {
+        settingsView?.let { windowManager.removeView(it) }
+        settingsView = null
+    }
+
+    private fun updateNode(updated: SceneNode, action: MappingActionType) {
+        val oldParams = nodeParams[updated.id]
+        val keepX = oldParams?.x ?: updated.x
+        val keepY = oldParams?.y ?: updated.y
+        deleteNodeViewOnly(updated.id)
+        renderNode(updated.copy(x = keepX, y = keepY), action)
+    }
+
+    private fun deleteNode(id: String) {
+        deleteNodeViewOnly(id)
+        nodes.remove(id)
+    }
+
+    private fun deleteNodeViewOnly(id: String) {
+        nodeViews[id]?.let { windowManager.removeView(it) }
+        nodeViews.remove(id)
+        nodeParams.remove(id)
     }
 }
