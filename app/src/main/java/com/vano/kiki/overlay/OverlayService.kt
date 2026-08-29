@@ -16,11 +16,14 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.ServiceCompat
 import com.vano.kiki.MainActivity
+import com.vano.kiki.scene.buildGenerateMenuView
+import kotlin.math.abs
 
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var bubbleView: View? = null
+    private var menuView: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -34,6 +37,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        hideMenu()
         bubbleView?.let { windowManager.removeView(it) }
         bubbleView = null
     }
@@ -44,7 +48,6 @@ class OverlayService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(channelId, "Kiki Overlay", NotificationManager.IMPORTANCE_MIN)
         )
-
         val openIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
@@ -54,7 +57,6 @@ class OverlayService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(openIntent)
             .build()
-
         ServiceCompat.startForeground(
             this, 1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         )
@@ -87,6 +89,9 @@ class OverlayService : Service() {
         var initialY = 0
         var touchX = 0f
         var touchY = 0f
+        var downX = 0f
+        var downY = 0f
+        val tapSlop = 8 * resources.displayMetrics.density
 
         bubble.setOnTouchListener { view, event ->
             when (event.action) {
@@ -95,6 +100,8 @@ class OverlayService : Service() {
                     initialY = params.y
                     touchX = event.rawX
                     touchY = event.rawY
+                    downX = event.rawX
+                    downY = event.rawY
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -103,11 +110,48 @@ class OverlayService : Service() {
                     windowManager.updateViewLayout(view, params)
                     true
                 }
+                MotionEvent.ACTION_UP -> {
+                    val moved = abs(event.rawX - downX) > tapSlop || abs(event.rawY - downY) > tapSlop
+                    if (!moved) toggleMenu(params)
+                    true
+                }
                 else -> false
             }
         }
 
         windowManager.addView(bubble, params)
         bubbleView = bubble
+    }
+
+    private fun toggleMenu(bubbleParams: WindowManager.LayoutParams) {
+        if (menuView != null) hideMenu() else showMenu(bubbleParams)
+    }
+
+    private fun showMenu(bubbleParams: WindowManager.LayoutParams) {
+        val view = buildGenerateMenuView(
+            context = this,
+            onDismiss = { hideMenu() },
+            onActionPicked = { hideMenu() /* TODO: taruh node ke Scene */ }
+        )
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = bubbleParams.x
+            y = bubbleParams.y + (64 * resources.displayMetrics.density).toInt()
+        }
+
+        windowManager.addView(view, params)
+        menuView = view
+    }
+
+    private fun hideMenu() {
+        menuView?.let { windowManager.removeView(it) }
+        menuView = null
     }
 }
