@@ -11,6 +11,8 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import kotlin.math.abs
 
+data class NodeViewHolder(val root: View, val gripView: View)
+
 fun View.makeDraggableOverlay(
     windowManager: WindowManager,
     params: WindowManager.LayoutParams,
@@ -51,32 +53,32 @@ fun View.makeDraggableOverlay(
     }
 }
 
-fun buildNodeView(context: Context, node: SceneNode, label: String): View {
+fun buildNodeView(context: Context, node: SceneNode, label: String): NodeViewHolder {
     val density = context.resources.displayMetrics.density
-    val outerSize = (140 * density * (node.radiusPercent / 18.5f)).toInt()
-        .coerceIn((80 * density).toInt(), (260 * density).toInt())
-    val innerSize = (70 * density).toInt()
+    val strokeWidth = (2 * density).toInt()
+    val margin = (18 * density).toInt()
 
     val outer = FrameLayout(context).apply {
-        layoutParams = FrameLayout.LayoutParams(outerSize, outerSize)
         background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.TRANSPARENT)
-            setStroke((2 * density).toInt(), 0xFFE8D44D.toInt(), 12f, 8f)
+            setStroke(strokeWidth, 0xFFE8D44D.toInt(), 12f, 8f)
         }
+        alpha = node.opacityPercent / 100f
     }
 
     val inner = FrameLayout(context).apply {
-        layoutParams = FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER)
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ).apply { setMargins(margin, margin, margin, margin) }
         background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(0xE6000000.toInt())
-            setStroke((2 * density).toInt(), Color.WHITE)
+            setStroke(strokeWidth, Color.WHITE)
         }
     }
-
     inner.addView(TextView(context).apply {
-        text = label.take(8)
+        text = label.take(10)
         setTextColor(Color.WHITE)
         textSize = 11f
         gravity = Gravity.CENTER
@@ -84,7 +86,18 @@ fun buildNodeView(context: Context, node: SceneNode, label: String): View {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
         )
     })
-
     outer.addView(inner)
-    return outer
+
+    val gripSize = (22 * density).toInt()
+    val grip = View(context).apply {
+        layoutParams = FrameLayout.LayoutParams(gripSize, gripSize, Gravity.BOTTOM or Gravity.END)
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0xFFFF7FD1.toInt())
+            setStroke((1 * density).toInt(), Color.WHITE)
+        }
+    }
+    outer.addView(grip)
+
+    return NodeViewHolder(outer, grip)
 }

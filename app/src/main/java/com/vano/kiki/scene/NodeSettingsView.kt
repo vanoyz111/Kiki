@@ -25,7 +25,8 @@ fun buildNodeSettingsView(
     val density = context.resources.displayMetrics.density
     val pad = (16 * density).toInt()
 
-    var radius = node.radiusPercent
+    var sizeDp = (node.widthPx / density).toInt().coerceIn(NodeSizing.MIN_DP, NodeSizing.MAX_DP)
+    var opacity = node.opacityPercent
     var frequency = node.frequency
     var stepMin = node.movementStepMin
     var stepMax = node.movementStepMax
@@ -45,7 +46,6 @@ fun buildNodeSettingsView(
         textSize = 14f
         setPadding(0, pad, 0, 4)
     }
-
     fun valueLabel(text: String) = TextView(context).apply {
         this.text = text
         setTextColor(Color.LTGRAY)
@@ -71,33 +71,39 @@ fun buildNodeSettingsView(
     })
     container.addView(header)
 
-    val pintasanRow = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, pad, 0, 0)
-    }
-    pintasanRow.addView(TextView(context).apply {
-        text = "Pintasan"
-        setTextColor(Color.WHITE)
-        textSize = 14f
-        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-    })
-    pintasanRow.addView(TextView(context).apply {
-        text = "(belum diatur)"
+    container.addView(TextView(context).apply {
+        text = "Tips: tarik titik pink di pojok tombol buat resize langsung."
         setTextColor(Color.GRAY)
-        textSize = 13f
+        textSize = 11f
+        setPadding(0, 6, 0, 0)
     })
-    container.addView(pintasanRow)
 
-    container.addView(sectionLabel("Nilai radius (%)"))
-    val radiusValue = valueLabel("${radius.toInt()}")
-    container.addView(radiusValue)
+    container.addView(sectionLabel("Ukuran"))
+    val sizeValue = valueLabel("$sizeDp dp")
+    container.addView(sizeValue)
     container.addView(SeekBar(context).apply {
-        max = 100
-        progress = radius.toInt()
+        max = NodeSizing.MAX_DP - NodeSizing.MIN_DP
+        progress = sizeDp - NodeSizing.MIN_DP
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
-                radius = value.toFloat(); radiusValue.text = "$value"
+                sizeDp = value + NodeSizing.MIN_DP
+                sizeValue.text = "$sizeDp dp"
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+    })
+
+    container.addView(sectionLabel("Transparansi (%)"))
+    val opacityValue = valueLabel("$opacity")
+    container.addView(opacityValue)
+    container.addView(SeekBar(context).apply {
+        max = 85
+        progress = opacity - 15
+        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
+                opacity = value + 15
+                opacityValue.text = "$opacity"
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
@@ -226,7 +232,9 @@ fun buildNodeSettingsView(
         setOnClickListener {
             onSave(
                 node.copy(
-                    radiusPercent = radius,
+                    widthPx = (sizeDp * density).toInt(),
+                    heightPx = (sizeDp * density).toInt(),
+                    opacityPercent = opacity,
                     frequency = frequency,
                     movementStepMin = stepMin,
                     movementStepMax = stepMax,
@@ -241,7 +249,7 @@ fun buildNodeSettingsView(
     container.addView(actions)
 
     return ScrollView(context).apply {
-        layoutParams = ViewGroup.LayoutParams((320 * density).toInt(), (520 * density).toInt())
+        layoutParams = ViewGroup.LayoutParams((320 * density).toInt(), (560 * density).toInt())
         setBackgroundColor(0xFF1C1C1EL.toInt())
         addView(container)
     }

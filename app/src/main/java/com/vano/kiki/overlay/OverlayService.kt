@@ -10,12 +10,14 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.IBinder
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.ServiceCompat
 import com.vano.kiki.MainActivity
 import com.vano.kiki.scene.MappingActionType
+import com.vano.kiki.scene.NodeSizing
 import com.vano.kiki.scene.SceneNode
 import com.vano.kiki.scene.buildGenerateMenuView
 import com.vano.kiki.scene.buildNodeSettingsView
@@ -34,6 +36,11 @@ class OverlayService : Service() {
     private val nodes = mutableMapOf<String, SceneNode>()
     private val nodeViews = mutableMapOf<String, View>()
     private val nodeParams = mutableMapOf<String, WindowManager.LayoutParams>()
+
+    private var resizeStartWidth = 0
+    private var resizeStartHeight = 0
+    private var resizeStartRawX = 0f
+    private var resizeStartRawY = 0f
 
     private val tapSlopPx get() = 8 * resources.displayMetrics.density
 
@@ -142,21 +149,25 @@ class OverlayService : Service() {
     }
 
     private fun placeNode(action: MappingActionType, nearX: Int, nearY: Int) {
+        val density = resources.displayMetrics.density
+        val defaultSize = (NodeSizing.DEFAULT_DP * density).toInt()
         val node = SceneNode(
             id = UUID.randomUUID().toString(),
             actionId = action.id,
             x = nearX,
-            y = nearY + (120 * resources.displayMetrics.density).toInt()
+            y = nearY + (120 * density).toInt(),
+            widthPx = defaultSize,
+            heightPx = defaultSize
         )
         renderNode(node, action)
     }
 
     private fun renderNode(node: SceneNode, action: MappingActionType) {
         nodes[node.id] = node
-        val view = buildNodeView(this, node, action.label)
+        val holder = buildNodeView(this, node, action.label)
+
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            node.widthPx, node.heightPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -165,11 +176,42 @@ class OverlayService : Service() {
             x = node.x
             y = node.y
         }
-        view.makeDraggableOverlay(windowManager, params, tapSlopPx) {
+
+        holder.root.makeDraggableOverlay(windowManager, params, tapSlopPx) {
             showNodeSettings(node, action)
         }
-        windowManager.addView(view, params)
-        nodeViews[node.id] = view
+
+        holder.gripView.setOnTouchListener { _, event ->
+            val density = resources.displayMetrics.density
+            val minSize = (NodeSizing.MIN_DP * density).toInt()
+            val maxSize = (NodeSizing.MAX_DP * density).toInt()
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    resizeStartWidth = params.width
+                    resizeStartHeight = params.height
+                    resizeStartRawX = event.rawX
+                    resizeStartRawY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - resizeStartRawX).toInt()
+                    val dy = (event.rawY - resizeStartRawY).toInt()
+                    params.width = (resizeStartWidth + dx).coerceIn(minSize, maxSize)
+                    params.height = (resizeStartHeight + dy).coerceIn(minSize, maxSize)
+                    windowManager.updateViewLayout(holder.root, params)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    node.widthPx = params.width
+                    node.heightPx = params.height
+                    true
+                }
+                else -> false
+            }
+        }
+
+        windowManager.addView(holder.root, params)
+        nodeViews[node.id] = holder.root
         nodeParams[node.id] = params
     }
 
