@@ -15,7 +15,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
-import com.vano.kiki.input.GamepadKeyCapture
+import com.vano.kiki.input.GamepadInputHub
 
 data class SettingsViewHolder(
     val root: View,
@@ -45,9 +45,8 @@ fun buildNodeSettingsView(
     var pintasanKey = node.pintasanKey
     var captureRequestId = 0
 
-    val capture = GamepadKeyCapture()
-    fun cancelWrapped() { capture.stopListening(); onCancel() }
-    fun deleteWrapped() { capture.stopListening(); onDelete() }
+    fun cancelWrapped() { GamepadInputHub.cancelCapture(); onCancel() }
+    fun deleteWrapped() { GamepadInputHub.cancelCapture(); onDelete() }
 
     fun sectionLabel(text: String) = TextView(context).apply {
         this.text = text
@@ -113,7 +112,7 @@ fun buildNodeSettingsView(
             pintasanValueText.text = "Menunggu input dari gamepad..."
             pintasanValueText.setTextColor(0xFFFF7FD1.toInt())
 
-            capture.startListening { keyName ->
+            GamepadInputHub.captureNext { keyName ->
                 if (requestId == captureRequestId) {
                     pintasanKey = keyName
                     pintasanValueText.text = keyName
@@ -123,7 +122,7 @@ fun buildNodeSettingsView(
 
             pintasanValueText.postDelayed({
                 if (requestId == captureRequestId && pintasanValueText.text == "Menunggu input dari gamepad...") {
-                    capture.stopListening()
+                    GamepadInputHub.cancelCapture()
                     pintasanValueText.text = "Gak kedeteksi, tap lagi buat coba"
                     pintasanValueText.setTextColor(Color.GRAY)
                 }
@@ -291,7 +290,7 @@ fun buildNodeSettingsView(
         setTextColor(Color.WHITE)
         setBackgroundColor(0xFFFF7FD1.toInt())
         setOnClickListener {
-            capture.stopListening()
+            GamepadInputHub.cancelCapture()
             onSave(
                 node.copy(
                     widthPx = (sizeDp * density).toInt(),

@@ -17,6 +17,8 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.core.app.ServiceCompat
 import com.vano.kiki.MainActivity
+import com.vano.kiki.engine.TouchInjector
+import com.vano.kiki.input.GamepadInputHub
 import com.vano.kiki.scene.MappingActionType
 import com.vano.kiki.scene.NodeSizing
 import com.vano.kiki.scene.SceneNode
@@ -60,6 +62,8 @@ class OverlayService : Service() {
 
     private val tapSlopPx get() = 8 * resources.displayMetrics.density
 
+    private val gamepadKeyListener: (String) -> Unit = { code -> handleGamepadKey(code) }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -68,6 +72,8 @@ class OverlayService : Service() {
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             startForegroundWithNotification()
             showMainControl()
+            GamepadInputHub.start()
+            GamepadInputHub.addRuntimeListener(gamepadKeyListener)
         } catch (e: Exception) {
             Log.e(TAG, "onCreate gagal, service dihentikan", e)
             stopSelf()
@@ -78,6 +84,8 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        GamepadInputHub.removeRuntimeListener(gamepadKeyListener)
+        GamepadInputHub.stop()
         hideMenu(); hideLayers(); hideQuickSettings(); hideSettings()
         nodeViews.values.forEach { safeRemoveView(it) }
         nodeViews.clear()
@@ -85,7 +93,20 @@ class OverlayService : Service() {
         controlRoot = null
     }
 
-    // ---------- Helper aman buat semua operasi WindowManager ----------
+    private fun handleGamepadKey(code: String) {
+        try {
+            nodes.values.forEach { node ->
+                if (node.pintasanKey == code) {
+                    val params = nodeParams[node.id] ?: return@forEach
+                    val centerX = params.x + params.width / 2
+                    val centerY = params.y + params.height / 2
+                    TouchInjector.tap(centerX, centerY)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "handleGamepadKey gagal", e)
+        }
+    }
 
     private fun safeAddView(view: View, params: WindowManager.LayoutParams) {
         try {
@@ -131,8 +152,6 @@ class OverlayService : Service() {
             this, 1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         )
     }
-
-    // ---------- Kontrol utama: bubble kecil <-> toolbar penuh ----------
 
     private fun showMainControl() {
         val density = resources.displayMetrics.density
@@ -192,8 +211,6 @@ class OverlayService : Service() {
         toolbar.settingsButton.setOnClickListener { showQuickSettings() }
     }
 
-    // ---------- Menu "Hasilkan" ----------
-
     private fun showMenu() {
         if (menuView != null) { hideMenu(); return }
         hideLayers(); hideQuickSettings()
@@ -223,8 +240,6 @@ class OverlayService : Service() {
         safeRemoveView(menuView)
         menuView = null
     }
-
-    // ---------- Panel Layer ----------
 
     private fun showLayers() {
         if (layersView != null) { hideLayers(); return }
@@ -268,8 +283,6 @@ class OverlayService : Service() {
         layersView = null
     }
 
-    // ---------- Pengaturan cepat ----------
-
     private fun showQuickSettings() {
         if (quickSettingsView != null) { hideQuickSettings(); return }
         hideMenu(); hideLayers()
@@ -303,8 +316,6 @@ class OverlayService : Service() {
         safeRemoveView(quickSettingsView)
         quickSettingsView = null
     }
-
-    // ---------- Node ----------
 
     private fun placeNode(action: MappingActionType, nearX: Int, nearY: Int) {
         val density = resources.displayMetrics.density
