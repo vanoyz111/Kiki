@@ -3,16 +3,24 @@ package com.vano.kiki.scene
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
+
+data class SettingsViewHolder(
+    val root: View,
+    val dragHandle: View,
+    val gripView: View
+)
 
 fun buildNodeSettingsView(
     context: Context,
@@ -21,7 +29,7 @@ fun buildNodeSettingsView(
     onSave: (SceneNode) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
-): View {
+): SettingsViewHolder {
     val density = context.resources.displayMetrics.density
     val pad = (16 * density).toInt()
 
@@ -33,11 +41,6 @@ fun buildNodeSettingsView(
     var deadZone = node.deadZonePercent
     var flipX = node.flipX
     var flipY = node.flipY
-
-    val container = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(pad, pad, pad, pad)
-    }
 
     fun sectionLabel(text: String) = TextView(context).apply {
         this.text = text
@@ -52,36 +55,49 @@ fun buildNodeSettingsView(
         textSize = 12f
     }
 
+    val root = FrameLayout(context)
+
+    val card = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        )
+        setBackgroundColor(0xFF1C1C1EL.toInt())
+    }
+
+    // Header = zona drag doang, gak ada child yang clickable (biar drag gak nabrak klik)
     val header = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        setPadding(pad, pad, pad + (28 * density).toInt(), pad / 2)
     }
     header.addView(TextView(context).apply {
-        text = title
+        text = "\u2261  $title"
         setTextColor(Color.WHITE)
-        textSize = 17f
+        textSize = 16f
         setTypeface(typeface, Typeface.BOLD)
-        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     })
-    header.addView(TextView(context).apply {
-        text = "\u2715"
-        setTextColor(Color.WHITE)
-        textSize = 18f
-        setOnClickListener { onCancel() }
-    })
-    container.addView(header)
+    card.addView(header)
 
-    container.addView(TextView(context).apply {
-        text = "Tips: tarik titik pink di pojok tombol buat resize langsung."
+    val scrollBody = ScrollView(context).apply {
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+    }
+    val body = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pad, 0, pad, pad)
+    }
+
+    body.addView(TextView(context).apply {
+        text = "Tarik judul di atas buat pindah, tarik titik pink pojok buat resize."
         setTextColor(Color.GRAY)
         textSize = 11f
-        setPadding(0, 6, 0, 0)
+        setPadding(0, 0, 0, pad / 2)
     })
 
-    container.addView(sectionLabel("Ukuran"))
+    body.addView(sectionLabel("Ukuran tombol"))
     val sizeValue = valueLabel("$sizeDp dp")
-    container.addView(sizeValue)
-    container.addView(SeekBar(context).apply {
+    body.addView(sizeValue)
+    body.addView(SeekBar(context).apply {
         max = NodeSizing.MAX_DP - NodeSizing.MIN_DP
         progress = sizeDp - NodeSizing.MIN_DP
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -94,10 +110,10 @@ fun buildNodeSettingsView(
         })
     })
 
-    container.addView(sectionLabel("Transparansi (%)"))
+    body.addView(sectionLabel("Transparansi tombol (%)"))
     val opacityValue = valueLabel("$opacity")
-    container.addView(opacityValue)
-    container.addView(SeekBar(context).apply {
+    body.addView(opacityValue)
+    body.addView(SeekBar(context).apply {
         max = 85
         progress = opacity - 15
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -110,10 +126,10 @@ fun buildNodeSettingsView(
         })
     })
 
-    container.addView(sectionLabel("Frekuensi"))
+    body.addView(sectionLabel("Frekuensi"))
     val freqValue = valueLabel("$frequency")
-    container.addView(freqValue)
-    container.addView(SeekBar(context).apply {
+    body.addView(freqValue)
+    body.addView(SeekBar(context).apply {
         max = 240
         progress = frequency
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -125,10 +141,10 @@ fun buildNodeSettingsView(
         })
     })
 
-    container.addView(sectionLabel("Langkah Pergerakan (Min - Max)"))
+    body.addView(sectionLabel("Langkah Pergerakan (Min - Max)"))
     val stepValue = valueLabel("$stepMin - $stepMax")
-    container.addView(stepValue)
-    container.addView(SeekBar(context).apply {
+    body.addView(stepValue)
+    body.addView(SeekBar(context).apply {
         max = 200
         progress = stepMin
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -139,7 +155,7 @@ fun buildNodeSettingsView(
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
     })
-    container.addView(SeekBar(context).apply {
+    body.addView(SeekBar(context).apply {
         max = 200
         progress = stepMax
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -151,10 +167,10 @@ fun buildNodeSettingsView(
         })
     })
 
-    container.addView(sectionLabel("Daerah Mati (%)"))
+    body.addView(sectionLabel("Daerah Mati (%)"))
     val deadZoneValue = valueLabel("${deadZone.toInt()}")
-    container.addView(deadZoneValue)
-    container.addView(SeekBar(context).apply {
+    body.addView(deadZoneValue)
+    body.addView(SeekBar(context).apply {
         max = 100
         progress = deadZone.toInt()
         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -179,7 +195,7 @@ fun buildNodeSettingsView(
         isChecked = flipX
         setOnCheckedChangeListener { _, checked -> flipX = checked }
     })
-    container.addView(flipXRow)
+    body.addView(flipXRow)
 
     val flipYRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -194,23 +210,23 @@ fun buildNodeSettingsView(
         isChecked = flipY
         setOnCheckedChangeListener { _, checked -> flipY = checked }
     })
-    container.addView(flipYRow)
+    body.addView(flipYRow)
 
-    container.addView(sectionLabel("Deskripsi"))
+    body.addView(sectionLabel("Deskripsi"))
     val descriptionInput = EditText(context).apply {
         setText(node.description)
         setTextColor(Color.WHITE)
         setHintTextColor(Color.GRAY)
         hint = "Opsional"
     }
-    container.addView(descriptionInput)
+    body.addView(descriptionInput)
 
-    val actions = LinearLayout(context).apply {
+    val actionsRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(0, pad, 0, 0)
     }
-    actions.addView(TextView(context).apply {
+    actionsRow.addView(TextView(context).apply {
         text = "Hapus"
         setTextColor(0xFFFF5C5C.toInt())
         textSize = 14f
@@ -218,14 +234,14 @@ fun buildNodeSettingsView(
         setPadding(pad, pad / 2, pad, pad / 2)
         setOnClickListener { onDelete() }
     })
-    actions.addView(View(context).apply {
+    actionsRow.addView(View(context).apply {
         layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
     })
-    actions.addView(Button(context).apply {
+    actionsRow.addView(Button(context).apply {
         text = "Batal"
         setOnClickListener { onCancel() }
     })
-    actions.addView(Button(context).apply {
+    actionsRow.addView(Button(context).apply {
         text = "Simpan"
         setTextColor(Color.WHITE)
         setBackgroundColor(0xFFFF7FD1.toInt())
@@ -246,11 +262,35 @@ fun buildNodeSettingsView(
             )
         }
     })
-    container.addView(actions)
+    body.addView(actionsRow)
 
-    return ScrollView(context).apply {
-        layoutParams = ViewGroup.LayoutParams((320 * density).toInt(), (560 * density).toInt())
-        setBackgroundColor(0xFF1C1C1EL.toInt())
-        addView(container)
+    scrollBody.addView(body)
+    card.addView(scrollBody)
+    root.addView(card)
+
+    val closeButton = TextView(context).apply {
+        text = "\u2715"
+        setTextColor(Color.WHITE)
+        textSize = 18f
+        setPadding(pad, pad, pad, pad / 2)
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.END
+        )
+        setOnClickListener { onCancel() }
     }
+    root.addView(closeButton)
+
+    val gripSize = (24 * density).toInt()
+    val grip = View(context).apply {
+        layoutParams = FrameLayout.LayoutParams(gripSize, gripSize, Gravity.BOTTOM or Gravity.END)
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0xFFFF7FD1.toInt())
+            setStroke((1 * density).toInt(), Color.WHITE)
+        }
+    }
+    root.addView(grip)
+
+    return SettingsViewHolder(root = root, dragHandle = header, gripView = grip)
 }
