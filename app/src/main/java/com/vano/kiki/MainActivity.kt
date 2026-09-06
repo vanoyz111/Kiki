@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -37,14 +41,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.topjohnwu.superuser.Shell
 import com.vano.kiki.input.GamepadDetector
 import com.vano.kiki.mapping.AppInfoUi
 import com.vano.kiki.mapping.AppPickerDialog
 import com.vano.kiki.mapping.MappedAppStore
 import com.vano.kiki.overlay.OverlayService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val PinkBg = Color(0xFFFFE1F5)
 private val PinkAccent = Color(0xFFFF7FD1)
@@ -80,6 +89,7 @@ fun KikiHomeScreen() {
         mutableStateListOf<AppInfoUi>().apply { addAll(MappedAppStore.load(context)) }
     }
     var showAppPicker by remember { mutableStateOf(false) }
+    var showLogcat by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         detector.start()
@@ -96,6 +106,10 @@ fun KikiHomeScreen() {
                 }
             }
         )
+    }
+
+    if (showLogcat) {
+        LogcatDialog(onDismiss = { showLogcat = false })
     }
 
     Column(
@@ -146,7 +160,7 @@ fun KikiHomeScreen() {
                 }
             }
             Card(
-                modifier = Modifier.weight(0.6f),
+                modifier = Modifier.weight(0.6f).clickable { showLogcat = true },
                 colors = CardDefaults.cardColors(containerColor = PinkCard),
                 shape = RoundedCornerShape(20.dp)
             ) {
@@ -226,6 +240,54 @@ fun KikiHomeScreen() {
 
         OutlinedButton(onClick = { /* TODO: keluar aman */ }, modifier = Modifier.fillMaxWidth()) {
             Text("keluar aman dari kiki")
+        }
+    }
+}
+
+@Composable
+fun LogcatDialog(onDismiss: () -> Unit) {
+    var logText by remember { mutableStateOf("Mengambil log...") }
+
+    LaunchedEffect(Unit) {
+        logText = try {
+            withContext(Dispatchers.IO) {
+                val result = Shell.cmd("logcat -d -t 1000").exec()
+                val filtered = result.out.filter {
+                    it.contains("kiki", ignoreCase = true) ||
+                        it.contains("FATAL EXCEPTION") ||
+                        it.contains("AndroidRuntime")
+                }
+                if (filtered.isEmpty()) "Gak ada log relevan di buffer saat ini." else filtered.joinToString("\n")
+            }
+        } catch (e: Exception) {
+            "Gagal ambil log: ${e.message}"
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Logcat Kiki", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("\u2715", color = Color.White, modifier = Modifier.clickable { onDismiss() })
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = logText,
+                        color = Color(0xFF8BFF8B),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
         }
     }
 }

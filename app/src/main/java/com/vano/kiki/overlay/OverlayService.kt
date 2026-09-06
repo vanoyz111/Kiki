@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.IBinder
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -24,6 +25,8 @@ import com.vano.kiki.scene.buildNodeSettingsView
 import com.vano.kiki.scene.buildNodeView
 import com.vano.kiki.scene.makeDraggableOverlay
 import java.util.UUID
+
+private const val TAG = "KikiOverlay"
 
 class OverlayService : Service() {
 
@@ -61,8 +64,14 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundWithNotification()
-        showMainControl()
+        try {
+            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+            startForegroundWithNotification()
+            showMainControl()
+        } catch (e: Exception) {
+            Log.e(TAG, "onCreate gagal, service dihentikan", e)
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -70,17 +79,44 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         hideMenu(); hideLayers(); hideQuickSettings(); hideSettings()
-        nodeViews.values.forEach { windowManager.removeView(it) }
+        nodeViews.values.forEach { safeRemoveView(it) }
         nodeViews.clear()
-        controlRoot?.let { windowManager.removeView(it) }
+        safeRemoveView(controlRoot)
         controlRoot = null
+    }
+
+    // ---------- Helper aman buat semua operasi WindowManager ----------
+
+    private fun safeAddView(view: View, params: WindowManager.LayoutParams) {
+        try {
+            windowManager.addView(view, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "addView gagal", e)
+        }
+    }
+
+    private fun safeRemoveView(view: View?) {
+        if (view == null) return
+        try {
+            if (view.isAttachedToWindow) windowManager.removeView(view)
+        } catch (e: Exception) {
+            Log.e(TAG, "removeView gagal", e)
+        }
+    }
+
+    private fun safeUpdateViewLayout(view: View, params: WindowManager.LayoutParams) {
+        try {
+            if (view.isAttachedToWindow) windowManager.updateViewLayout(view, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "updateViewLayout gagal", e)
+        }
     }
 
     private fun startForegroundWithNotification() {
         val channelId = "kiki_overlay_channel"
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(channelId, "Kiki Overlay", NotificationManager.IMPORTANCE_MIN)
+            NotificationChannel(channelId, "Kiki Overlay", NotificationManager.IMPORTANCE_LOW)
         )
         val openIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
@@ -99,7 +135,6 @@ class OverlayService : Service() {
     // ---------- Kontrol utama: bubble kecil <-> toolbar penuh ----------
 
     private fun showMainControl() {
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
         val size = (56 * density).toInt()
 
@@ -115,7 +150,7 @@ class OverlayService : Service() {
             y = 200
         }
 
-        windowManager.addView(root, params)
+        safeAddView(root, params)
         controlRoot = root
         controlParams = params
         renderCollapsed()
@@ -132,7 +167,7 @@ class OverlayService : Service() {
 
         params.width = (56 * density).toInt()
         params.height = (56 * density).toInt()
-        windowManager.updateViewLayout(root, params)
+        safeUpdateViewLayout(root, params)
 
         bubble.makeDraggableOverlay(windowManager, params, tapSlopPx) { renderExpanded() }
     }
@@ -148,7 +183,7 @@ class OverlayService : Service() {
         toolbar.root.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         params.width = toolbar.root.measuredWidth
         params.height = toolbar.root.measuredHeight
-        windowManager.updateViewLayout(root, params)
+        safeUpdateViewLayout(root, params)
 
         toolbar.dragHandle.makeDraggableOverlay(windowManager, params, tapSlopPx) {}
         toolbar.collapseButton.setOnClickListener { renderCollapsed() }
@@ -180,12 +215,12 @@ class OverlayService : Service() {
             x = cp.x
             y = cp.y + cp.height + (8 * resources.displayMetrics.density).toInt()
         }
-        windowManager.addView(view, params)
+        safeAddView(view, params)
         menuView = view
     }
 
     private fun hideMenu() {
-        menuView?.let { windowManager.removeView(it) }
+        safeRemoveView(menuView)
         menuView = null
     }
 
@@ -199,7 +234,7 @@ class OverlayService : Service() {
     }
 
     private fun renderLayersPanel(cp: WindowManager.LayoutParams) {
-        layersView?.let { windowManager.removeView(it) }
+        safeRemoveView(layersView)
         val items = nodes.values.map { node ->
             Triple(node.id, nodeActions[node.id]?.label ?: node.actionId, nodeViews[node.id]?.visibility == View.GONE)
         }
@@ -224,16 +259,16 @@ class OverlayService : Service() {
             x = cp.x
             y = cp.y + cp.height + (8 * resources.displayMetrics.density).toInt()
         }
-        windowManager.addView(view, params)
+        safeAddView(view, params)
         layersView = view
     }
 
     private fun hideLayers() {
-        layersView?.let { windowManager.removeView(it) }
+        safeRemoveView(layersView)
         layersView = null
     }
 
-    // ---------- Pengaturan cepat (sembunyikan semua) ----------
+    // ---------- Pengaturan cepat ----------
 
     private fun showQuickSettings() {
         if (quickSettingsView != null) { hideQuickSettings(); return }
@@ -260,12 +295,12 @@ class OverlayService : Service() {
             x = cp.x
             y = cp.y + cp.height + (8 * resources.displayMetrics.density).toInt()
         }
-        windowManager.addView(view, params)
+        safeAddView(view, params)
         quickSettingsView = view
     }
 
     private fun hideQuickSettings() {
-        quickSettingsView?.let { windowManager.removeView(it) }
+        safeRemoveView(quickSettingsView)
         quickSettingsView = null
     }
 
@@ -322,7 +357,7 @@ class OverlayService : Service() {
                     val dy = (event.rawY - nodeResizeStartRawY).toInt()
                     params.width = (nodeResizeStartW + dx).coerceIn(minSize, maxSize)
                     params.height = (nodeResizeStartH + dy).coerceIn(minSize, maxSize)
-                    windowManager.updateViewLayout(holder.root, params)
+                    safeUpdateViewLayout(holder.root, params)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -334,7 +369,7 @@ class OverlayService : Service() {
             }
         }
 
-        windowManager.addView(holder.root, params)
+        safeAddView(holder.root, params)
         nodeViews[node.id] = holder.root
         nodeParams[node.id] = params
     }
@@ -386,7 +421,7 @@ class OverlayService : Service() {
                     val dy = (event.rawY - settingsResizeStartRawY).toInt()
                     params.width = (settingsResizeStartW + dx).coerceIn(minW, maxW)
                     params.height = (settingsResizeStartH + dy).coerceIn(minH, maxH)
-                    windowManager.updateViewLayout(holder.root, params)
+                    safeUpdateViewLayout(holder.root, params)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -398,12 +433,12 @@ class OverlayService : Service() {
             }
         }
 
-        windowManager.addView(holder.root, params)
+        safeAddView(holder.root, params)
         settingsView = holder.root
     }
 
     private fun hideSettings() {
-        settingsView?.let { windowManager.removeView(it) }
+        safeRemoveView(settingsView)
         settingsView = null
     }
 
@@ -422,7 +457,7 @@ class OverlayService : Service() {
     }
 
     private fun deleteNodeViewOnly(id: String) {
-        nodeViews[id]?.let { windowManager.removeView(it) }
+        safeRemoveView(nodeViews[id])
         nodeViews.remove(id)
         nodeParams.remove(id)
     }

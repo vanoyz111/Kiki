@@ -20,5 +20,6 @@ data class SceneNode(
     val flipX: Boolean = false,
     val flipY: Boolean = false,
     val opacityPercent: Int = 100,
+    val pintasanKey: String? = null,
     val description: String = ""
 )

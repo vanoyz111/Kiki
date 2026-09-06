@@ -15,6 +15,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
+import com.vano.kiki.input.GamepadKeyCapture
 
 data class SettingsViewHolder(
     val root: View,
@@ -41,6 +42,11 @@ fun buildNodeSettingsView(
     var deadZone = node.deadZonePercent
     var flipX = node.flipX
     var flipY = node.flipY
+    var pintasanKey = node.pintasanKey
+
+    val capture = GamepadKeyCapture()
+    fun cancelWrapped() { capture.stopListening(); onCancel() }
+    fun deleteWrapped() { capture.stopListening(); onDelete() }
 
     fun sectionLabel(text: String) = TextView(context).apply {
         this.text = text
@@ -65,7 +71,6 @@ fun buildNodeSettingsView(
         setBackgroundColor(0xFF1C1C1EL.toInt())
     }
 
-    // Header = zona drag doang, gak ada child yang clickable (biar drag gak nabrak klik)
     val header = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -93,6 +98,33 @@ fun buildNodeSettingsView(
         textSize = 11f
         setPadding(0, 0, 0, pad / 2)
     })
+
+    val pintasanValueText = TextView(context).apply {
+        text = pintasanKey ?: "(belum diatur)"
+        setTextColor(Color.GRAY)
+        textSize = 13f
+    }
+    val pintasanRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setOnClickListener {
+            pintasanValueText.text = "Menunggu input dari gamepad..."
+            pintasanValueText.setTextColor(0xFFFF7FD1.toInt())
+            capture.startListening { keyName ->
+                pintasanKey = keyName
+                pintasanValueText.text = keyName
+                pintasanValueText.setTextColor(Color.GRAY)
+            }
+        }
+    }
+    pintasanRow.addView(TextView(context).apply {
+        text = "Pintasan (tap lalu pencet tombol gamepad)"
+        setTextColor(Color.WHITE)
+        textSize = 14f
+        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    })
+    pintasanRow.addView(pintasanValueText)
+    body.addView(pintasanRow)
 
     body.addView(sectionLabel("Ukuran tombol"))
     val sizeValue = valueLabel("$sizeDp dp")
@@ -232,20 +264,21 @@ fun buildNodeSettingsView(
         textSize = 14f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(pad, pad / 2, pad, pad / 2)
-        setOnClickListener { onDelete() }
+        setOnClickListener { deleteWrapped() }
     })
     actionsRow.addView(View(context).apply {
         layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
     })
     actionsRow.addView(Button(context).apply {
         text = "Batal"
-        setOnClickListener { onCancel() }
+        setOnClickListener { cancelWrapped() }
     })
     actionsRow.addView(Button(context).apply {
         text = "Simpan"
         setTextColor(Color.WHITE)
         setBackgroundColor(0xFFFF7FD1.toInt())
         setOnClickListener {
+            capture.stopListening()
             onSave(
                 node.copy(
                     widthPx = (sizeDp * density).toInt(),
@@ -257,6 +290,7 @@ fun buildNodeSettingsView(
                     deadZonePercent = deadZone,
                     flipX = flipX,
                     flipY = flipY,
+                    pintasanKey = pintasanKey,
                     description = descriptionInput.text.toString()
                 )
             )
@@ -277,7 +311,7 @@ fun buildNodeSettingsView(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.TOP or Gravity.END
         )
-        setOnClickListener { onCancel() }
+        setOnClickListener { cancelWrapped() }
     }
     root.addView(closeButton)
 
