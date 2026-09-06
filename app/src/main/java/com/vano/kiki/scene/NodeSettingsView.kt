@@ -43,6 +43,7 @@ fun buildNodeSettingsView(
     var flipX = node.flipX
     var flipY = node.flipY
     var pintasanKey = node.pintasanKey
+    var captureRequestId = 0
 
     val capture = GamepadKeyCapture()
     fun cancelWrapped() { capture.stopListening(); onCancel() }
@@ -108,13 +109,25 @@ fun buildNodeSettingsView(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setOnClickListener {
+            val requestId = ++captureRequestId
             pintasanValueText.text = "Menunggu input dari gamepad..."
             pintasanValueText.setTextColor(0xFFFF7FD1.toInt())
+
             capture.startListening { keyName ->
-                pintasanKey = keyName
-                pintasanValueText.text = keyName
-                pintasanValueText.setTextColor(Color.GRAY)
+                if (requestId == captureRequestId) {
+                    pintasanKey = keyName
+                    pintasanValueText.text = keyName
+                    pintasanValueText.setTextColor(Color.GRAY)
+                }
             }
+
+            pintasanValueText.postDelayed({
+                if (requestId == captureRequestId && pintasanValueText.text == "Menunggu input dari gamepad...") {
+                    capture.stopListening()
+                    pintasanValueText.text = "Gak kedeteksi, tap lagi buat coba"
+                    pintasanValueText.setTextColor(Color.GRAY)
+                }
+            }, 15000)
         }
     }
     pintasanRow.addView(TextView(context).apply {

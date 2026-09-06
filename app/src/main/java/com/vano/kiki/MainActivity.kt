@@ -54,6 +54,7 @@ import com.vano.kiki.mapping.MappedAppStore
 import com.vano.kiki.overlay.OverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val PinkBg = Color(0xFFFFE1F5)
 private val PinkAccent = Color(0xFFFF7FD1)
@@ -250,14 +251,20 @@ fun LogcatDialog(onDismiss: () -> Unit) {
 
     LaunchedEffect(Unit) {
         logText = try {
-            withContext(Dispatchers.IO) {
-                val result = Shell.cmd("logcat -d -t 1000").exec()
-                val filtered = result.out.filter {
-                    it.contains("kiki", ignoreCase = true) ||
-                        it.contains("FATAL EXCEPTION") ||
-                        it.contains("AndroidRuntime")
+            val filtered = withTimeoutOrNull(6000) {
+                withContext(Dispatchers.IO) {
+                    val result = Shell.cmd("logcat -d").exec()
+                    result.out.takeLast(1500).filter {
+                        it.contains("kiki", ignoreCase = true) ||
+                            it.contains("FATAL EXCEPTION") ||
+                            it.contains("AndroidRuntime")
+                    }
                 }
-                if (filtered.isEmpty()) "Gak ada log relevan di buffer saat ini." else filtered.joinToString("\n")
+            }
+            when {
+                filtered == null -> "Timeout ambil log (>6 detik). Coba lagi."
+                filtered.isEmpty() -> "Gak ada log relevan di 1500 baris terakhir."
+                else -> filtered.joinToString("\n")
             }
         } catch (e: Exception) {
             "Gagal ambil log: ${e.message}"
