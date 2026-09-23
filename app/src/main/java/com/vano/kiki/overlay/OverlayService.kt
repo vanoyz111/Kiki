@@ -17,7 +17,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.core.app.ServiceCompat
 import com.vano.kiki.MainActivity
-import com.vano.kiki.engine.TouchInjector
+import com.vano.kiki.engine.NativeTouchInjector
 import com.vano.kiki.input.GamepadInputHub
 import com.vano.kiki.scene.MappingActionType
 import com.vano.kiki.scene.NodeSizing
@@ -72,6 +72,11 @@ class OverlayService : Service() {
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
             startForegroundWithNotification()
             showMainControl()
+            NativeTouchInjector.start(
+                this,
+                resources.displayMetrics.widthPixels,
+                resources.displayMetrics.heightPixels
+            )
             GamepadInputHub.start()
             GamepadInputHub.addRuntimeListener(gamepadKeyListener)
         } catch (e: Exception) {
@@ -86,6 +91,7 @@ class OverlayService : Service() {
         super.onDestroy()
         GamepadInputHub.removeRuntimeListener(gamepadKeyListener)
         GamepadInputHub.stop()
+        NativeTouchInjector.stop()
         hideMenu(); hideLayers(); hideQuickSettings(); hideSettings()
         nodeViews.values.forEach { safeRemoveView(it) }
         nodeViews.clear()
@@ -100,7 +106,7 @@ class OverlayService : Service() {
                     val params = nodeParams[node.id] ?: return@forEach
                     val centerX = params.x + params.width / 2
                     val centerY = params.y + params.height / 2
-                    TouchInjector.tap(centerX, centerY)
+                    NativeTouchInjector.tap(centerX, centerY)
                 }
             }
         } catch (e: Exception) {
